@@ -1,42 +1,51 @@
 import cv2
 from ultralytics import YOLO
 
-# Load the YOLOv11 model (you can choose a different model variant based on performance needs)
-model = YOLO('yolo11n.pt')  # Change to yolo11s.pt, yolo11m.pt, etc., if needed
+# Load YOLO model for people detection (trained on COCO)
+people_model = YOLO('yolov11n.pt')  # People detection model
 
-# Open the video stream from the MacBook's webcam (device index 0)
-cap = cv2.VideoCapture(0)
+# Load YOLO model for face detection
+face_model = YOLO('yolov11n-face.pt')  # Face detection model
 
-if not cap.isOpened():
-    print("Error: Could not open the video stream.")
-else:
-    print("Video stream opened successfully.")  # Debugging line
-    while True:
-        ret, frame = cap.read()
-        if not ret:
-            print("Error: Failed to read frame.")  # Debugging line
-            break
+# Use the tracking functionality and restrict detections to class 0 (person)
+tracker = people_model.track(source=0, classes=[0], stream=True, show=False)
 
-        # Run object detection with YOLOv11
-        results = model(frame)  # Perform inference on the captured frame
+for result in tracker:
+    # Get the original frame for this tracking result
+    frame = result.orig_img.copy()
 
-        # Extract results
-        for result in results[0].boxes.data:
-            # Get the bounding box coordinates
-            x1, y1, x2, y2 = map(int, result[:4])  # Get box coordinates (top-left and bottom-right)
+    # Iterate over tracked boxes (only persons now)
+    for box in result.boxes.data:
+        x1, y1, x2, y2 = map(int, box[:4])
+        # Draw a blue bounding box around the person
+        cv2.rectangle(frame, (x1, y1), (x2, y2), (255, 0, 0), 2)
+        label = f"Person {box[4]:.2f}"
+        cv2.putText(frame, label, (x1, y1 - 10),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 2)
 
-            # Draw bounding box
-            cv2.rectangle(frame, (x1, y1), (x2, y2), (255, 0, 0), 2)  # Blue box with thickness of 2
+        # Optionally, display tracking ID if available
+        if hasattr(box, "id"):
+            track_id = int(box.id)
+            cv2.putText(frame, f"ID {track_id}", (x1, y2 + 20),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 2)
 
-            # Optionally, display the label and confidence
-            label = f"{results[0].names[int(result[5])]} {result[4]:.2f}"  # Get class label and confidence
-            cv2.putText(frame, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 2)
-
-        # Show frame with bounding boxes and labels
-        cv2.imshow("Detection Results", frame)
+        # Crop the detected person region for face detection
+        cropped_person = frame[y1:y2, x1:x2]
         
-        if cv2.waitKey(1) & 0xFF == ord('q'):  # Quit on 'q' key press
-            break
+        # Run face detection on the cropped region
+        face_results = face_model(cropped_person)
+        for face in face_results[0].boxes.data:
+            fx1, fy1, fx2, fy2 = map(int, face[:4])
+            cv2.rectangle(cropped_person, (fx1, fy1), (fx2, fy2), (0, 255, 0), 2)
+            face_label = f"Face {face[4]:.2f}"
+            cv2.putText(cropped_person, face_label, (fx1, fy1 - 10),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+        
+        # Update the frame with the processed person region
+        frame[y1:y2, x1:x2] = cropped_person
 
-    cap.release()
-    cv2.destroyAllWindows()
+    cv2.imshow("Tracking Detection Results", frame)
+    if cv2.waitKey(1) & 0xFF == ord('q'):
+        break
+
+cv2.destroyAllWindows()
