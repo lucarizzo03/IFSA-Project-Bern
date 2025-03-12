@@ -16,7 +16,7 @@ def parse_utkface_filename(filename):
         return None, None, None  # Invalid filename format
     try:
         age = int(parts[0])
-        gender = "Female" if int(parts[1]) == 1 else "Male"
+        gender = "Female" if int(parts[1]) == 1 else "Male" # This is how UTKFaced defines Female and Male.
         race = int(parts[2])  # Race index (0-4 in UTKFace)
     except ValueError:
         return None, None, None
@@ -89,7 +89,8 @@ for filename in file_list:
             face_analysis = face_app.get(face_img)
             if face_analysis:
                 pred_age = round(face_analysis[0].age)
-                pred_gender = "Male" if face_analysis[0].gender > 0.5 else "Female"
+                pred_gender = "Male" if face_analysis[0].gender > 0.5 else "Female" # InsightFace, gender classification 
+                # typically follows the convention of using 0 for female and 1 for male.
                 pred_age_label = get_age_bin(pred_age)
                 
                 # Accuracy calculations
